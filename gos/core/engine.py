@@ -43,6 +43,7 @@ from fast_graphrag._types import (
 
 from gos.utils.config import settings
 
+from .local_embeddings import LocalEmbeddingService
 from .parsing import parse_skill_document
 from .policies import (
     SkillEdgeUpsertPolicy,
@@ -514,6 +515,17 @@ def build_default_embedding_service() -> Any:
     # Read once: pydantic-settings + tests may refresh env-backed fields between accesses.
     embedding_model = settings.EMBEDDING_MODEL
     provider, model_name = parse_model_spec(embedding_model)
+
+    if provider == "local":
+        # No network/credentials to gracefully degrade around here -- unlike
+        # the hosted providers below, surface a bad model name or a
+        # GOS_EMBEDDING_DIM mismatch immediately and directly, instead of
+        # burying it inside the generic "not configured" fallback message.
+        return LocalEmbeddingService(
+            model=model_name,
+            embedding_dim=settings.EMBEDDING_DIM,
+        )
+
     try:
         if provider == "gemini":
             api_key = _secret_value(settings.GEMINI_API_KEY)

@@ -167,7 +167,8 @@ If you find this work useful, please cite the EMNLP 2026 version:
 
 - Python 3.10 -- 3.12
 - [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
-- An embedding API key (OpenAI, Gemini, or any OpenAI-compatible provider)
+- An embedding API key (OpenAI, Gemini, or any OpenAI-compatible provider) -- or the `local` extra for a free, offline `sentence-transformers` model
+- An LLM API key (Gemini, OpenRouter, or any OpenAI-compatible provider) for indexing -- **required even with local embeddings**; there is no local/offline option for this one yet (see the note under [Provider: Local](#installation))
 
 ### Setup
 
@@ -226,6 +227,39 @@ GOS_EMBEDDING_DIM=3072
 ```
 </details>
 
+<details>
+<summary><strong>Provider: Local (offline, no API key)</strong></summary>
+
+Runs a `sentence-transformers` model on your own machine -- no network calls, no
+embedding API key. Requires the optional `local` extra:
+
+```bash
+uv sync --extra local
+```
+
+```bash
+GOS_EMBEDDING_MODEL=local/sentence-transformers/all-MiniLM-L6-v2
+GOS_EMBEDDING_DIM=384
+# Larger/better alternative: local/BAAI/bge-base-en-v1.5 (GOS_EMBEDDING_DIM=768)
+```
+
+`GOS_EMBEDDING_DIM` must equal the model's native output size; a mismatch raises
+a clear error naming the correct value at startup rather than failing deep inside
+the vector store.
+
+> **This does not make indexing free or offline on its own.** `GOS_LLM_MODEL` is a
+> separate concern with no local option yet, and it's used for more than
+> relation-linking: it also fills in `inputs`/`outputs`/`domain`/etc. for any
+> `SKILL.md` whose frontmatter omits them (`GOS_USE_FULL_MARKDOWN=true`, the
+> default). Minimal skill libraries -- frontmatter with just `name` and
+> `description` -- lean on this heavily. Skip the LLM key and indexing still
+> **succeeds**, but silently produces disconnected nodes with **zero edges**:
+> no dependency/workflow/semantic/alternative relations, and retrieval falls
+> back to plain embedding-similarity ranking -- the dependency-aware PPR
+> behavior GoS is built around is gone. Set a real `GOS_LLM_MODEL` provider key
+> even when using local embeddings.
+</details>
+
 ## Quick Start
 
 **Goal:** install the package, pull the published skill libraries, build (or download) a graph workspace, then run retrieval from the shell.
@@ -265,7 +299,7 @@ For **ALFWorld** and **SkillsBench** defaults, keep this mapping (see [evaluatio
 
 ### Step 3: Get a workspace (choose one path)
 
-**A. Build locally** (needs embedding API; duration grows with library size):
+**A. Build locally** (needs an embedding provider -- hosted or the offline `local` one -- **and** an LLM key; duration grows with library size):
 
 ```bash
 mkdir -p data/gos_workspace
@@ -273,7 +307,7 @@ uv run gos index data/skillsets/skills_200 \
   --workspace data/gos_workspace/skills_200_v1 --clear
 ```
 
-Use the matching pair for other sets (e.g. `skills_1000` → `data/gos_workspace/skills_1000_v1`). **Embedding model and dimension in `.env` must stay the same** for later retrieval (see [Configuration](#configuration)).
+Use the matching pair for other sets (e.g. `skills_1000` → `data/gos_workspace/skills_1000_v1`). **Embedding model and dimension in `.env` must stay the same** for later retrieval (see [Configuration](#configuration)). If you skipped the LLM key thinking local embeddings covered everything, check `construction_report.json`'s `edges.total` after this step -- `0` means indexing degraded silently; see the note under [Provider: Local](#installation).
 
 **B. Download a prebuilt workspace** (no `gos index`; must match the embedding used to build that archive):
 
@@ -409,7 +443,7 @@ All runtime settings are driven by environment variables. See [`.env.example`](.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GOS_EMBEDDING_MODEL` | `openai/text-embedding-3-large` | Embedding model for indexing and retrieval (use `openai/<deployment>` on Azure) |
+| `GOS_EMBEDDING_MODEL` | `openai/text-embedding-3-large` | Embedding model for indexing and retrieval (use `openai/<deployment>` on Azure, or `local/<sentence-transformers-model-id>` for offline) |
 | `GOS_EMBEDDING_DIM` | `3072` | Embedding dimension (must match the model output) |
 | `GOS_PREBUILT_WORKING_DIR` | -- | Path to a prebuilt workspace for retrieval |
 | `GOS_RETRIEVAL_TOP_N` | `8` | Maximum number of skills returned |
